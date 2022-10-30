@@ -1,12 +1,16 @@
 package com.example.fragmentsnavigation.presentation
 
 import android.annotation.SuppressLint
+import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -21,6 +25,7 @@ import com.example.fragmentsnavigation.R
 import com.example.fragmentsnavigation.data.OrderImageItem
 import com.example.fragmentsnavigation.databinding.FragmentOrderDetailsBinding
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.*
 
 class OrderDetailsFragment: Fragment(R.layout.fragment_order_details) {
@@ -29,6 +34,8 @@ class OrderDetailsFragment: Fragment(R.layout.fragment_order_details) {
     private lateinit var adapter: OrderImagesAdapter
 
     private lateinit var workManager: WorkManager
+    private lateinit var imageUri: Uri
+    private var loaded = false
 
     private var orderId = 0
 
@@ -44,6 +51,25 @@ class OrderDetailsFragment: Fragment(R.layout.fragment_order_details) {
             }
             else {
                 Log.e("", "image $uri is already in list")
+            }
+        }
+    }
+
+    private val makePhoto = registerForActivityResult(ActivityResultContracts.TakePicture()){ result ->
+        result?.let{
+            if (it){
+                Log.d("", "Image successfully stored")
+                listOfImages.add(
+                    OrderImageItem(
+                        loaded=false,
+                        name="Hello",
+                        image = imageUri.toString()
+                    )
+                )
+                adapter.imagesList = listOfImages
+            }
+            else {
+                Log.e("", "Image not stored")
             }
         }
     }
@@ -85,9 +111,27 @@ class OrderDetailsFragment: Fragment(R.layout.fragment_order_details) {
         binding.orderImagesRecyclerView.layoutManager = layoutManager
         binding.orderImagesRecyclerView.adapter = adapter
 
-        binding.addImageBtn.setOnClickListener{
-            //run activity launcher
-            getContent.launch("image/*")
+//        binding.addImageBtn.setOnClickListener{
+//            //run activity launcher
+//            getContent.launch("image/*")
+//        }
+
+        binding.addImageBtn.setOnClickListener {
+            val photoFile = File.createTempFile(
+                "IMG_",
+                ".jpg",
+                requireContext().getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+            )
+
+            imageUri = FileProvider.getUriForFile(
+                requireContext(),
+                "${requireContext().packageName}.provider",
+                photoFile
+            )
+
+            Log.e("", "Uri to store image is ${imageUri.toString()} ${imageUri.encodedPath}")
+
+            makePhoto.launch(imageUri)
         }
 
         binding.uploadBtn.setOnClickListener{
@@ -114,15 +158,22 @@ class OrderDetailsFragment: Fragment(R.layout.fragment_order_details) {
         lifecycleScope.launchWhenStarted {
             //val response = (requireContext().applicationContext as App).uploadRepository.getOrderById(requireArguments().getInt("ORDER_ID"))
             //TODO show only progressBar
-            val response = (requireContext().applicationContext as App).uploadRepository.getOrderById(arguments?.getInt("orderId") ?: -1)
+            val orderName = arguments?.getString("orderName")
+            Log.e("", "Got orderName to search: $orderName")
+//            val response = (requireContext().applicationContext as App).uploadRepository.getOrderById(arguments?.getInt("orderId") ?: -1)
+            val response = (requireContext().applicationContext as App).uploadRepository.getOrderByName(arguments?.getString("orderName") ?: "0")
             orderId = response?.id ?: -1
 
-            binding.orderNameTextView.text = "Order: ${response?.orderName}"
-            binding.orderUserTextView.text = "User: ${response?.userName}"
-            binding.orderCreatedAtTextView.text = "Created At: ${response?.createdAt}"
+            if(response != null){
+                loaded = true
+            }
+
+            binding.orderNameTextView.text = "Order: ${response?.orderName ?: orderName}"
+            binding.orderUserTextView.text = "User: ${response?.userName ?: ""}"
+            binding.orderCreatedAtTextView.text = "Created At: ${response?.createdAt ?: ""}"
 
             listOfImages = response?.images?.map{uri ->
-                OrderImageItem(loaded = true, name = uri, image = "http://172.16.1.54:8080/orders/image/$uri")
+                OrderImageItem(loaded = true, name = uri, image = "http://192.168.1.6:8080/orders/image/$uri")
             }?.toMutableList() ?: mutableListOf()
             adapter.imagesList = listOfImages
 
@@ -131,29 +182,45 @@ class OrderDetailsFragment: Fragment(R.layout.fragment_order_details) {
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private fun startUpload(orderId: String, userId: String, imagesUriArray: Array<String>){
-        val inputData = workDataOf(
-            ORDER_ID_KEY to orderId,
-            USER_ID_KEY to userId,
-            IMAGES_URI_ARRAY_KEY to imagesUriArray
-        )
 
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
 
-        val worker = OneTimeWorkRequestBuilder<UploadWorker>()
-            .setInputData(inputData)
-            .setConstraints(constraints)
-            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-            .build()
+        lifecycleScope.launch {
+            val response = (requireContext().applicationContext as App).uploadRepository.newOrder(arguments?.getString("orderName") ?: "0")
 
-        workerId = worker.id
+            response?.let {
 
-        workManager.enqueue(worker)
-        workManager.getWorkInfoByIdLiveData(workerId!!).observe(viewLifecycleOwner){workInfo ->
-            if(workInfo.state == WorkInfo.State.SUCCEEDED){
-                Log.e("Hehe", "Got output data: ${workInfo.outputData.getString("OUTPUT_DATA")}")
+                binding.orderUserTextView.text = "User: ${it.userName ?: ""}"
+                binding.orderCreatedAtTextView.text = "Created At: ${it.createdAt ?: ""}"
+
+                if (imagesUriArray.isNotEmpty()){
+                    val inputData = workDataOf(
+                        ORDER_ID_KEY to it.id,
+                        USER_ID_KEY to userId,
+                        IMAGES_URI_ARRAY_KEY to imagesUriArray
+                    )
+
+                    val constraints = Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build()
+
+                    val worker = OneTimeWorkRequestBuilder<UploadWorker>()
+                        .setInputData(inputData)
+                        .setConstraints(constraints)
+                        .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                        .build()
+
+                    workerId = worker.id
+
+                    workManager.enqueue(worker)
+                    workManager.getWorkInfoByIdLiveData(workerId!!).observe(viewLifecycleOwner){workInfo ->
+                        if(workInfo.state == WorkInfo.State.SUCCEEDED){
+                            Log.e("Hehe", "Got output data: ${workInfo.outputData.getString("OUTPUT_DATA")}")
+                        }
+                    }
+                }
+
             }
         }
     }
@@ -163,7 +230,7 @@ class OrderDetailsFragment: Fragment(R.layout.fragment_order_details) {
             (requireContext().applicationContext as App).uploadRepository.deleteImage(name)
             val response = (requireContext().applicationContext as App).uploadRepository.getOrderById(requireArguments().getInt("ORDER_ID"))
             adapter.imagesList = response?.images?.map{uri ->
-                OrderImageItem(loaded = true, name = uri, image = "http://172.16.1.54:8080/orders/image/$uri")
+                OrderImageItem(loaded = true, name = uri, image = "http://192.168.1.6/orders/image/$uri")
             } ?: emptyList()
         }
         catch (e: Exception){

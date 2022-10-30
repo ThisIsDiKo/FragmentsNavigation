@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import android.view.*
+import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.SearchView
 import androidx.fragment.app.Fragment
 import androidx.core.os.bundleOf
@@ -22,6 +23,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.example.fragmentsnavigation.data.OrderItem
 import com.example.fragmentsnavigation.databinding.FragmentListOrdersBinding
+import com.example.fragmentsnavigation.domain.RequestResult
 import com.example.fragmentsnavigation.presentation.OrderImagesAdapter
 import com.example.fragmentsnavigation.presentation.OrdersAdapter
 import kotlinx.coroutines.launch
@@ -61,7 +63,7 @@ class ListOrdersFragment : Fragment() {
         adapter = OrdersAdapter(){
             Log.e(TAG, "Need to get order with id $it")
             //(requireActivity() as Navigator).showDetails(it)
-            val b = bundleOf("orderId" to it)
+            val b = bundleOf("orderName" to it)
             findNavController().navigate(R.id.action_listOrdersFragment_to_orderDetailsFragment, b)
         }
 
@@ -80,6 +82,14 @@ class ListOrdersFragment : Fragment() {
 
         binding.fab.setOnClickListener{
             Log.e(TAG, "Fab clicked")
+            findNavController().navigate(R.id.action_listOrdersFragment_to_cameraFragment)
+        }
+
+        binding.btnSearch.setOnClickListener{
+            adapter.ordersList = emptyList()
+            lifecycleScope.launch{
+                searchList()
+            }
         }
 
         return binding.root
@@ -103,40 +113,140 @@ class ListOrdersFragment : Fragment() {
             }
 
             override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+                if (menuItem.itemId == R.id.action_logout){
+                    Log.e(TAG, "Logging out")
+                    (requireContext().applicationContext as App).prefs.edit().putString("token", "").apply()
+                    findNavController().navigate(R.id.action_listOrdersFragment_to_logInFragment)
+                }
+                else if (menuItem.itemId == R.id.action_filter){
+                    val popupMenu = PopupMenu(requireActivity(),requireActivity().findViewById(R.id.action_filter))
+                    popupMenu.inflate(R.menu.menu_filter)
+                    popupMenu.setOnMenuItemClickListener {
+                        when(it.itemId){
+                            R.id.action_filter_by_date -> {
+                                Log.e(TAG, "By date clicked")
+                            }
+                            R.id.action_filter_by_name -> {
+                                Log.e(TAG, "By name clicked")
+                                updateAdaptersList(
+                                    ordersList.sortedBy {
+                                        it.orderName
+                                    }
+                                )
+                            }
+                            R.id.action_filter_by_user -> {
+                                Log.e(TAG, "By user clicked")
+                                updateAdaptersList(
+                                    ordersList.sortedBy {
+                                        it.username
+                                    }
+                                )
+                            }
+                            else -> {
+
+                            }
+                        }
+                        true
+                    }
+                    popupMenu.show()
+                }
                 return true
             }
         }, viewLifecycleOwner, Lifecycle.State.RESUMED)
 
         lifecycleScope.launchWhenResumed {
             Log.e(TAG, "start getting orders")
-            adapter.ordersList = (requireContext().applicationContext as App).uploadRepository.getAllOrders().map{
-                OrderItem(
-                    orderId = it.id,
-                    orderName = it.orderName,
-                    username = it.userName,
-                    createdAt = it.createdAt
-                )
+//            adapter.ordersList = (requireContext().applicationContext as App).uploadRepository.getAllOrders().map{
+//                OrderItem(
+//                    orderId = it.id,
+//                    orderName = it.orderName,
+//                    username = it.userName,
+//                    createdAt = it.createdAt
+//                )
+//            }
+            updateList()
+        }
+    }
+
+    private suspend fun searchList(){
+        setRefresh(true)
+        val query = binding.etSearch.text.toString()
+        Log.e(TAG, "Sending query: $query ${query.isBlank()}")
+
+        val result = if (query.isBlank()){
+            (requireContext().applicationContext as App).uploadRepository.getAllOrders()
+        }
+        else {
+            (requireContext().applicationContext as App).uploadRepository.search(query)
+        }
+
+        when (result){
+            is RequestResult.Authorized -> {
+                ordersList = result.data!!.map{
+                    OrderItem(
+                        orderId = it.id,
+                        orderName = it.orderName,
+                        username = it.userName,
+                        createdAt = it.createdAt
+                    )
+                }
+                updateAdaptersList(ordersList)
+            }
+            is RequestResult.Unauthorized -> {
+                findNavController().navigate(R.id.action_logInFragment_to_listOrdersFragment)
+            }
+            is RequestResult.UnknownError -> {
+                Log.e(TAG, "Got unknown error from all orders update")
             }
         }
+
+        setRefresh(false)
     }
 
     private suspend fun updateList(){
         setRefresh(true)
-        try {
-            adapter.ordersList = (requireContext().applicationContext as App).uploadRepository.getAllOrders().map{
-                OrderItem(
-                    orderId = it.id,
-                    orderName = it.orderName,
-                    username = it.userName,
-                    createdAt = it.createdAt
-                )
+//        try {
+//            adapter.ordersList = (requireContext().applicationContext as App).uploadRepository.getAllOrders().map{
+//                OrderItem(
+//                    orderId = it.id,
+//                    orderName = it.orderName,
+//                    username = it.userName,
+//                    createdAt = it.createdAt
+//                )
+//            }
+//        }
+//        catch (e: Exception){
+//            Log.e(TAG, "Got update exception: $e")
+//        }
+
+        val result = (requireContext().applicationContext as App).uploadRepository.getAllOrders()
+        when (result){
+            is RequestResult.Authorized -> {
+                ordersList = result.data!!.map{
+                    OrderItem(
+                        orderId = it.id,
+                        orderName = it.orderName,
+                        username = it.userName,
+                        createdAt = it.createdAt
+                    )
+                }
+
+                updateAdaptersList(ordersList)
+            }
+            is RequestResult.Unauthorized -> {
+                findNavController().navigate(R.id.action_listOrdersFragment_to_logInFragment)
+            }
+            is RequestResult.UnknownError -> {
+                Log.e(TAG, "Got unknown error from all orders update")
             }
         }
-        catch (e: Exception){
-            Log.e(TAG, "Got update exception: $e")
-        }
+
 
         setRefresh(false)
+    }
+
+    private fun updateAdaptersList(list: List<OrderItem>){
+        adapter.ordersList = list
     }
 
     private fun setRefresh(state: Boolean){

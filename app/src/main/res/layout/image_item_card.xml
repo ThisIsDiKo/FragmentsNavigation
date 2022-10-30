@@ -30,6 +30,15 @@
             android:layout_margin="8dp"
             android:layout_gravity="end|top"
             android:foreground="?android:attr/selectableItemBackgroundBorderless"/>
+        <ImageView
+            android:id="@+id/imageSync"
+            android:src="@drawable/ic_baseline_sync_24"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_margin="8dp"
+            android:layout_gravity="start|top"
+            android:visibility="gone"
+            android:foreground="?android:attr/selectableItemBackgroundBorderless"/>
 
     </FrameLayout>
 

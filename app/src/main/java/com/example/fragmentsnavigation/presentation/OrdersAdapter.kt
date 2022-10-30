@@ -10,7 +10,7 @@ import com.example.fragmentsnavigation.data.OrderItem
 import com.example.fragmentsnavigation.databinding.OrdersItemBinding
 
 class OrdersAdapter(
-    private val onClick: (Int) -> Unit
+    private val onClick: (String) -> Unit
 ): RecyclerView.Adapter<OrdersAdapter.OrderViewHolder>(), View.OnClickListener {
 
     private val TAG = this::class.java.simpleName
@@ -32,7 +32,7 @@ class OrdersAdapter(
     override fun onBindViewHolder(holder: OrderViewHolder, position: Int) {
         val orderItem = ordersList[position]
         with(holder.binding){
-            holder.itemView.tag = orderItem.orderId
+            holder.itemView.tag = orderItem.orderName
             root.setOnClickListener(this@OrdersAdapter)
             orderUserView.text = orderItem.username
             orderCreatedAtView.text = orderItem.createdAt
@@ -43,9 +43,9 @@ class OrdersAdapter(
     override fun getItemCount(): Int = ordersList.size
 
     override fun onClick(p0: View) {
-        val orderId = p0.tag as Int
-        Log.d(TAG, "Order on click perfomed $orderId")
-        onClick(orderId)
+        val orderName = p0.tag as String
+        Log.d(TAG, "Order on click perfomed $orderName")
+        onClick(orderName)
         //TODO: need to go to fragment details
     }
 

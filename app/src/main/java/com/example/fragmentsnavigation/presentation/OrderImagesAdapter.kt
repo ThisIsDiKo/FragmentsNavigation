@@ -44,6 +44,12 @@ class OrderImagesAdapter(
     override fun onBindViewHolder(holder: MyViewHolder, position: Int) {
         val imageListItem = imagesList[position]
         with(holder.binding){
+            if (imageListItem.loaded){
+                imageSync.visibility = View.VISIBLE
+            }
+            else {
+                imageSync.visibility = View.GONE
+            }
             root.setOnClickListener(this@OrderImagesAdapter)
             holder.itemView.tag = imageListItem
             deleteImageBtn.tag = imageListItem

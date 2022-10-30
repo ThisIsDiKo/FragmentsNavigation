@@ -17,11 +17,20 @@ interface UploadService {
     @GET("orders/all")
     suspend fun getAllOrders(@Header("Authorization") token: String): ListOfOrders
 
+    @GET("orders/search/{name}")
+    suspend fun search(@Header("Authorization") token: String, @Path("name") name: String): ListOfOrders
+
     @GET("orders/id/{id}")
     suspend fun getOrderById(@Header("Authorization") token: String, @Path("id") id: Int): OrderInfo
 
+    @GET("orders/name/{name}")
+    suspend fun getOrderByName(@Header("Authorization") token: String, @Path("name") name: String): OrderInfo
+
     @POST("orders/image/delete/{name}")
     suspend fun deleteImage(@Path("name") name: String): Unit
+
+    @POST("orders/new")
+    suspend fun newOrder(@Header("Authorization") token: String, @Body order: OrderCreateRequest): OrderInfo
 
     @POST("user/login")
     suspend fun login(@Body loginRequest: LoginRequest): LoginResponse

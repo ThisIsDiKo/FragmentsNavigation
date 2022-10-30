@@ -3,10 +3,7 @@ package com.example.fragmentsnavigation.domain
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.util.Log
-import com.example.fragmentsnavigation.data.LoginRequest
-import com.example.fragmentsnavigation.data.OrderInfo
-import com.example.fragmentsnavigation.data.OrderResponse
-import com.example.fragmentsnavigation.data.OrderResponseImages
+import com.example.fragmentsnavigation.data.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -41,25 +38,54 @@ class UploadRepositoryImpl(
         }
     }
 
-    override suspend fun getAllOrders(): List<OrderInfo> {
+    override suspend fun getAllOrders(): RequestResult<List<OrderInfo>> {
         return try{
             val token = prefs.getString("token", "") ?: ""
             Log.e(TAG, "Load token from prefs: $token")
             val list = api.getAllOrders("Bearer $token")
-            list.orders
+            RequestResult.Authorized(data = list.orders)
+            //list.orders
         }
         catch(e: HttpException){
             if (e.code() == 401){
                 Log.e(TAG, "Unauthorized access")
+                RequestResult.Unauthorized()
             }
             else {
                 Log.e(TAG, "Unknown error")
+                RequestResult.UnknownError()
             }
-            emptyList()
+            //emptyList()
         }
         catch (e: Exception){
             Log.e(TAG, "Unexpected exception was caught ${e.toString()}")
-            emptyList()
+            //emptyList()
+            RequestResult.UnknownError()
+        }
+    }
+
+    override suspend fun search(query: String): RequestResult<List<OrderInfo>>{
+        return try{
+            val token = prefs.getString("token", "") ?: ""
+            val list = api.search("Bearer $token", name = query)
+            RequestResult.Authorized(data = list.orders)
+            //list.orders
+        }
+        catch(e: HttpException){
+            if (e.code() == 401){
+                Log.e(TAG, "Unauthorized access")
+                RequestResult.Unauthorized()
+            }
+            else {
+                Log.e(TAG, "Unknown error")
+                RequestResult.UnknownError()
+            }
+            //emptyList()
+        }
+        catch (e: Exception){
+            Log.e(TAG, "Unexpected exception was caught ${e.toString()}")
+            //emptyList()
+            RequestResult.UnknownError()
         }
     }
 
@@ -68,6 +94,29 @@ class UploadRepositoryImpl(
             val token = prefs.getString("token", "") ?: ""
             Log.e(TAG, "Load token from prefs: $token")
             api.getOrderById(token = "Bearer $token", id = id)
+        }
+        catch (e: Exception){
+            Log.e(TAG, "Unexpected exception was caught ${e.toString()}")
+            null
+        }
+    }
+
+    override suspend fun getOrderByName(name: String): OrderInfo? {
+        return try {
+            val token = prefs.getString("token", "") ?: ""
+            api.getOrderByName(token = "Bearer $token", name = name)
+        }
+        catch (e: Exception){
+            Log.e(TAG, "Unexpected exception was caught ${e.toString()}")
+            null
+        }
+    }
+
+    override suspend fun newOrder(name: String): OrderInfo? {
+        return try {
+            val token = prefs.getString("token", "") ?: ""
+            val orderCreateRequest = OrderCreateRequest(id = -1, userId = -1, orderName = name)
+            api.newOrder(token = "Bearer $token", order = orderCreateRequest)
         }
         catch (e: Exception){
             Log.e(TAG, "Unexpected exception was caught ${e.toString()}")
